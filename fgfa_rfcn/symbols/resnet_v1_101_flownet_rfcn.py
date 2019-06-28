@@ -1151,7 +1151,7 @@ class resnet_v1_101_flownet_rfcn(Symbol):
                                    name='bbox_pred_reshape')
 
         # group output
-        group = mx.sym.Group([data_cur, rois, cls_prob, bbox_pred])
+        group = mx.sym.Group([data_cur, rois, cls_prob, bbox_pred, aggregated_conv_feat])
         self.sym = group
         return group
 

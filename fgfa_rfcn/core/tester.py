@@ -29,7 +29,7 @@ from collections import deque
 
 class Predictor(object):
     def __init__(self, symbol, data_names, label_names,
-                 context=mx.cpu(), max_data_shapes=None,
+                 context=mx.gpu(), max_data_shapes=None,
                  provide_data=None, provide_label=None,
                  arg_params=None, aux_params=None):
         self._mod = MutableModule(symbol, data_names, label_names,
@@ -145,7 +145,9 @@ def im_detect(predictor, data_batch, data_names, scales, cfg):
     data_dict_all = [dict(zip(data_names, data_batch.data[i])) for i in xrange(len(data_batch.data))]
     scores_all = []
     pred_boxes_all = []
+    aggr_feats_all = []
     for output, data_dict, scale in zip(output_all, data_dict_all, scales):
+        aggr_feats_all.append(output['_plus9_output'])
         if cfg.TEST.HAS_RPN:
             rois = output['rois_output'].asnumpy()[:, 1:]
         else:
@@ -164,7 +166,7 @@ def im_detect(predictor, data_batch, data_names, scales, cfg):
 
         scores_all.append(scores)
         pred_boxes_all.append(pred_boxes)
-    return zip(scores_all, pred_boxes_all, data_dict_all)
+    return zip(scores_all, pred_boxes_all, data_dict_all), aggr_feats_all
 
 
 def im_batch_detect(predictor, data_batch, data_names, scales, cfg):
@@ -451,6 +453,11 @@ def vis_all_detection(im_array, detections, class_names, scale, cfg, threshold=0
     plt.show()
 
 
+# A fixed color set for all classes
+import random
+color_set = [[random.randint(0, 256) for j in range(3)] for i in range(100)]
+
+
 def draw_all_detection(im_array, detections, class_names, scale, cfg, threshold=0.1):
     """
     visualize all detections in one image
@@ -469,7 +476,8 @@ def draw_all_detection(im_array, detections, class_names, scale, cfg, threshold=
     for j, name in enumerate(class_names):
         if name == '__background__':
             continue
-        color = (random.randint(0, 256), random.randint(0, 256), random.randint(0, 256))  # generate a random color
+        # color = (random.randint(0, 256), random.randint(0, 256), random.randint(0, 256))  # generate a random color
+        color = color_set[j]
         dets = detections[j]
         for det in dets:
             bbox = det[:4] * scale

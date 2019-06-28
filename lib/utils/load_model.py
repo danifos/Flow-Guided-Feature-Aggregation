@@ -57,7 +57,7 @@ def load_param(prefix, epoch, convert=False, ctx=None, process=False):
     arg_params, aux_params = load_checkpoint(prefix, epoch)
     if convert:
         if ctx is None:
-            ctx = mx.cpu()
+            ctx = mx.gpu()
         arg_params = convert_context(arg_params, ctx)
         aux_params = convert_context(aux_params, ctx)
     if process:

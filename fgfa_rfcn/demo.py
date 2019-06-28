@@ -112,6 +112,7 @@ def main():
     # load demo data
 
     image_names = glob.glob(cur_path + '/../demo/ILSVRC2015_val_00007010/*.JPEG')
+    image_names.sort()
     output_dir = cur_path + '/../demo/rfcn_fgfa/'
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -140,8 +141,8 @@ def main():
     t1 = time.time()
     data = [[mx.nd.array(data[i][name]) for name in data_names] for i in xrange(len(data))]
     max_data_shape = [[('data', (1, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),
-                       ('data_cache', (19, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),
-                       ('feat_cache', ((19, cfg.network.FGFA_FEAT_DIM,
+                       ('data_cache', (11, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),    
+                       ('feat_cache', ((11, cfg.network.FGFA_FEAT_DIM,
                                                 np.ceil(max([v[0] for v in cfg.SCALES]) / feat_stride).astype(np.int),
                                                 np.ceil(max([v[1] for v in cfg.SCALES]) / feat_stride).astype(np.int))))]]
     provide_data = [[(k, v.shape) for k, v in zip(data_names, data[i])] for i in xrange(len(data))]
@@ -170,6 +171,8 @@ def main():
                  for _ in range(num_classes)]
     data_list = deque(maxlen=all_frame_interval)
     feat_list = deque(maxlen=all_frame_interval)
+    feat_output = []
+    aggr_feat_output = []
     image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
     # append cfg.TEST.KEY_FRAME_INTERVAL padding images in the front (first frame)
     while len(data_list) < cfg.TEST.KEY_FRAME_INTERVAL:
@@ -200,9 +203,12 @@ def main():
                 image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
                 data_list.append(image)
                 feat_list.append(feat)
+                feat_output.append(feat)
 
                 prepare_data(data_list, feat_list, data_batch)
-                pred_result = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
+                pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
+                assert len(aggr_feat) == 1
+                aggr_feat_output.append(aggr_feat[0])
 
                 data_batch.data[0][-2] = None
                 data_batch.provide_data[0][-2] = ('data_cache', None)
@@ -216,6 +222,7 @@ def main():
                     save_image(output_dir, file_idx, out_im)
                 print 'testing {} {:.4f}s'.format(str(file_idx)+'.JPEG', total_time /(file_idx+1))
                 file_idx += 1
+
         else:
             #################################################
             # end part of a video                           #
@@ -226,8 +233,11 @@ def main():
             while end_counter < cfg.TEST.KEY_FRAME_INTERVAL + 1:
                 data_list.append(image)
                 feat_list.append(feat)
+                feat_output.append(feat)
                 prepare_data(data_list, feat_list, data_batch)
-                pred_result = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
+                pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
+                assert len(aggr_feat) == 1
+                aggr_feat_output.append(aggr_feat[0])
 
                 out_im = process_pred_result(classes, pred_result, num_classes, thresh, cfg, nms, all_boxes, file_idx, max_per_image, vis,
                                     data_list[cfg.TEST.KEY_FRAME_INTERVAL].asnumpy(), scales)

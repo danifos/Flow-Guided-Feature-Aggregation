@@ -172,7 +172,7 @@ class AnchorLoader(mx.io.DataIter):
         self.shuffle = shuffle
         self.ctx = ctx
         if self.ctx is None:
-            self.ctx = [mx.cpu()]
+            self.ctx = [mx.gpu()]
         self.work_load_list = work_load_list
         self.feat_stride = feat_stride
         self.anchor_scales = anchor_scales
