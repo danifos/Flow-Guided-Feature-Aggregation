@@ -171,9 +171,8 @@ def main():
                  for _ in range(num_classes)]
     data_list = deque(maxlen=all_frame_interval)
     feat_list = deque(maxlen=all_frame_interval)
-    feat_output = []
-    aggr_feat_output = []
     image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
+    print(feat.shape)
     # append cfg.TEST.KEY_FRAME_INTERVAL padding images in the front (first frame)
     while len(data_list) < cfg.TEST.KEY_FRAME_INTERVAL:
         data_list.append(image)
@@ -193,6 +192,7 @@ def main():
 
             if len(data_list) < all_frame_interval - 1:
                 image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
+                print(feat.shape)
                 data_list.append(image)
                 feat_list.append(feat)
 
@@ -201,14 +201,13 @@ def main():
                 # main part of the loop
                 #################################################
                 image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
+                print(feat.shape)
                 data_list.append(image)
                 feat_list.append(feat)
-                feat_output.append(feat)
 
                 prepare_data(data_list, feat_list, data_batch)
                 pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
                 assert len(aggr_feat) == 1
-                aggr_feat_output.append(aggr_feat[0])
 
                 data_batch.data[0][-2] = None
                 data_batch.provide_data[0][-2] = ('data_cache', None)
@@ -230,14 +229,13 @@ def main():
 
             end_counter = 0
             image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
+            print(feat.shape)
             while end_counter < cfg.TEST.KEY_FRAME_INTERVAL + 1:
                 data_list.append(image)
                 feat_list.append(feat)
-                feat_output.append(feat)
                 prepare_data(data_list, feat_list, data_batch)
                 pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
                 assert len(aggr_feat) == 1
-                aggr_feat_output.append(aggr_feat[0])
 
                 out_im = process_pred_result(classes, pred_result, num_classes, thresh, cfg, nms, all_boxes, file_idx, max_per_image, vis,
                                     data_list[cfg.TEST.KEY_FRAME_INTERVAL].asnumpy(), scales)

@@ -43,7 +43,7 @@ class FGFADetector:
 
     def __init__(self):
         # get symbol
-        pprint.pprint(cfg)
+        # pprint.pprint(cfg)
         cfg.symbol = 'resnet_v1_101_flownet_rfcn'
         model = '/../model/rfcn_fgfa_flownet_vid'
         all_frame_interval = cfg.TEST.KEY_FRAME_INTERVAL * 2 + 1
@@ -60,7 +60,7 @@ class FGFADetector:
         self.aggr_sym = aggr_sym
 
 
-    def predict(self, images):
+    def predict(self, images, feat_output, aggr_feat_output):
 
         model = self.model
         all_frame_interval = self.all_frame_interval
@@ -114,8 +114,6 @@ class FGFADetector:
         scales = [data_batch.data[i][1].asnumpy()[0, 2] for i in xrange(len(data_batch.data))]
         data_list = deque(maxlen=all_frame_interval)
         feat_list = deque(maxlen=all_frame_interval)
-        feat_output = []
-        aggr_feat_output = []
         image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
         # append cfg.TEST.KEY_FRAME_INTERVAL padding images in the front (first frame)
         while len(data_list) < cfg.TEST.KEY_FRAME_INTERVAL:
@@ -146,18 +144,19 @@ class FGFADetector:
                     image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
                     data_list.append(image)
                     feat_list.append(feat)
-                    feat_output.append(feat.asnumpy())
+                    feat_output.append(feat.asnumpy()[0])
 
                     prepare_data(data_list, feat_list, data_batch)
                     pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
                     assert len(aggr_feat) == 1
-                    aggr_feat_output.append(aggr_feat.asnumpy()[0])
+                    aggr_feat_output.append(aggr_feat[0].asnumpy()[0])
 
                     data_batch.data[0][-2] = None
                     data_batch.provide_data[0][-2] = ('data_cache', None)
                     data_batch.data[0][-1] = None
                     data_batch.provide_data[0][-1] = ('feat_cache', None)
 
+                    print '\rTesting FGFA R-FCN: {} / {}'.format(file_idx, len(images)),
                     file_idx += 1
 
             else:
@@ -170,13 +169,14 @@ class FGFADetector:
                 while end_counter < cfg.TEST.KEY_FRAME_INTERVAL + 1:
                     data_list.append(image)
                     feat_list.append(feat)
-                    feat_output.append(feat.asnumpy())
+                    feat_output.append(feat.asnumpy()[0])
                     prepare_data(data_list, feat_list, data_batch)
                     pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
                     assert len(aggr_feat) == 1
-                    aggr_feat_output.append(aggr_feat.asnumpy()[0])
+                    aggr_feat_output.append(aggr_feat[0].asnumpy()[0])
 
+                    print '\rTesting FGFA R-FCN: {} / {}'.format(file_idx, len(images)),
                     file_idx += 1
                     end_counter+=1
 
-        return {'feat': feat_output, 'aggr': aggr_feat_output}
+        print
