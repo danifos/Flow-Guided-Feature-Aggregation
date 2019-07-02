@@ -144,12 +144,14 @@ class FGFADetector:
                     image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
                     data_list.append(image)
                     feat_list.append(feat)
-                    feat_output.append(feat.asnumpy()[0])
+                    if feat_output is not None:
+                        feat_output.append(feat.asnumpy()[0][:, :1024])
 
                     prepare_data(data_list, feat_list, data_batch)
                     pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
                     assert len(aggr_feat) == 1
-                    aggr_feat_output.append(aggr_feat[0].asnumpy()[0])
+                    if aggr_feat_output is not None:
+                        aggr_feat_output.append(aggr_feat[0].asnumpy()[0])
 
                     data_batch.data[0][-2] = None
                     data_batch.provide_data[0][-2] = ('data_cache', None)
@@ -169,11 +171,13 @@ class FGFADetector:
                 while end_counter < cfg.TEST.KEY_FRAME_INTERVAL + 1:
                     data_list.append(image)
                     feat_list.append(feat)
-                    feat_output.append(feat.asnumpy()[0])
+                    if feat_output is not None:
+                        feat_output.append(feat.asnumpy()[0][:, :1024])
                     prepare_data(data_list, feat_list, data_batch)
                     pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
                     assert len(aggr_feat) == 1
-                    aggr_feat_output.append(aggr_feat[0].asnumpy()[0])
+                    if aggr_feat_output is not None:
+                        aggr_feat_output.append(aggr_feat[0].asnumpy()[0])
 
                     print '\rTesting FGFA R-FCN: {} / {}'.format(file_idx, len(images)),
                     file_idx += 1
