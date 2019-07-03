@@ -145,7 +145,7 @@ class FGFADetector:
                     data_list.append(image)
                     feat_list.append(feat)
                     if feat_output is not None:
-                        feat_output.append(feat.asnumpy()[0][:, :1024])
+                        feat_output.append(feat.asnumpy()[0][:1024])
 
                     prepare_data(data_list, feat_list, data_batch)
                     pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
@@ -172,7 +172,7 @@ class FGFADetector:
                     data_list.append(image)
                     feat_list.append(feat)
                     if feat_output is not None:
-                        feat_output.append(feat.asnumpy()[0][:, :1024])
+                        feat_output.append(feat.asnumpy()[0][:1024])
                     prepare_data(data_list, feat_list, data_batch)
                     pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
                     assert len(aggr_feat) == 1
