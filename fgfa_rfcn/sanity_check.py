@@ -85,36 +85,6 @@ def save_image(output_dir, count, out_im):
     filename = str(count) + '.JPEG'
     cv2.imwrite(output_dir + filename, out_im)
 
-def main():
-    # get symbol
-    pprint.pprint(cfg)
-    cfg.symbol = 'resnet_v1_101_flownet_rfcn'
-    model = '/../model/rfcn_fgfa_flownet_vid'
-    all_frame_interval = cfg.TEST.KEY_FRAME_INTERVAL * 2 + 1
-    max_per_image = cfg.TEST.max_per_image
-    feat_sym_instance = eval(cfg.symbol + '.' + cfg.symbol)()
-    aggr_sym_instance = eval(cfg.symbol + '.' + cfg.symbol)()
-
-    feat_sym = feat_sym_instance.get_feat_symbol(cfg)
-    aggr_sym = aggr_sym_instance.get_aggregation_symbol(cfg)
-
-    # set up class names
-    num_classes = 31
-    classes = ['__background__','airplane', 'antelope', 'bear', 'bicycle',
-               'bird', 'bus', 'car', 'cattle',
-               'dog', 'domestic_cat', 'elephant', 'fox',
-               'giant_panda', 'hamster', 'horse', 'lion',
-               'lizard', 'monkey', 'motorcycle', 'rabbit',
-               'red_panda', 'sheep', 'snake', 'squirrel',
-               'tiger', 'train', 'turtle', 'watercraft',
-               'whale', 'zebra']
-
-    # load demo data
-
-    image_names = glob.glob(cur_path + '/../demo/ILSVRC2015_val_00007010/*.JPEG')
-    image_names.sort()
-
-
 
 class FGFADetector:
 
@@ -149,6 +119,7 @@ class FGFADetector:
         self.num_classes = num_classes
         self.classes = classes
         self.max_per_image = max_per_image
+        self.index = 0
 
 
     def predict(self, images, feat_output, aggr_feat_output):
@@ -161,7 +132,8 @@ class FGFADetector:
         classes = self.classes
         max_per_image = self.max_per_image
 
-        output_dir = cur_path + '/../demo/rfcn_fgfa/'
+        output_dir = cur_path + '/../demo/rfcn_fgfa_{}/'.format(self.index)
+        self.index += 1
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
