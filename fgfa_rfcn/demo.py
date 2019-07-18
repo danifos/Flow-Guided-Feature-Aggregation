@@ -75,7 +75,7 @@ def process_pred_result(classes, pred_result, num_classes, thresh, cfg, nms, all
 
             boxes_this_image = [[]] + [all_boxes[j][idx + delta] for j in range(1, num_classes)]
 
-            out_im = draw_all_detection(center_image, boxes_this_image, classes, scales[delta], cfg)
+            out_im = draw_all_detection(center_image, boxes_this_image, classes, scales[delta], cfg, threshold=0.5)
 
             return out_im
     return 0
@@ -112,10 +112,11 @@ def main():
     # load demo data
 
     # image_names = glob.glob(cur_path + '/../demo/ILSVRC2015_val_00007010/*.JPEG')
-    image_names = glob.glob('/home/user/ILSVRC2015/Data/VID/val/ILSVRC2015_val_00003000/*.JPEG')
+    video_index = 'val_00022000'
+    image_names = glob.glob('/home/user/ILSVRC2015/Data/VID/val/ILSVRC2015_{}/*.JPEG'.format(video_index))
     image_names.sort()
     # output_dir = cur_path + '/../demo/rfcn_fgfa/'
-    output_dir = cur_path + '/../demo/00003000/'
+    output_dir = cur_path + '/../demo/{}/'.format(video_index)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
@@ -147,6 +148,7 @@ def main():
                        ('feat_cache', ((11, cfg.network.FGFA_FEAT_DIM,
                                                 np.ceil(max([v[0] for v in cfg.SCALES]) / feat_stride).astype(np.int),
                                                 np.ceil(max([v[1] for v in cfg.SCALES]) / feat_stride).astype(np.int))))]]
+    print(max_data_shape)
     provide_data = [[(k, v.shape) for k, v in zip(data_names, data[i])] for i in xrange(len(data))]
     provide_label = [None for _ in xrange(len(data))]
 
@@ -258,7 +260,7 @@ def main():
                 all_boxes[cls_ind + 1][frame_ind] = dets[keep, :]
         for idx in range(len(data)):
             boxes_this_image = [[]] + [all_boxes[j][idx] for j in range(1, num_classes)]
-            out_im = draw_all_detection(data[idx][0].asnumpy(), boxes_this_image, classes, scales[0], cfg)
+            out_im = draw_all_detection(data[idx][0].asnumpy(), boxes_this_image, classes, scales[0], cfg, threshold=0.5)
             save_image(output_dir, idx, out_im)
 
     print 'done'
