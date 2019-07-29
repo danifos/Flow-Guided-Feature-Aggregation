@@ -28,7 +28,8 @@ os.environ['PYTHONUNBUFFERED'] = '1'
 os.environ['MXNET_CUDNN_AUTOTUNE_DEFAULT'] = '0'
 os.environ['MXNET_ENABLE_GPU_P2P'] = '0'
 cur_path = os.path.abspath(os.path.dirname(__file__))
-update_config(cur_path + '/../experiments/fgfa_rfcn/cfgs/fgfa_rfcn_vid_demo.yaml')
+update_config(cur_path + '/../experiments/fgfa_rfcn/cfgs/resnet_v1_101_flownet_imagenet_vid_rfcn_end2end_ohem.yaml')
+cfg.TEST.KEY_FRAME_INTERVAL = 5
 
 sys.path.insert(0, os.path.join(cur_path, '../external/mxnet/', cfg.MXNET_VERSION))
 import mxnet as mx
@@ -96,7 +97,7 @@ def main():
     aggr_sym_instance = eval(cfg.symbol + '.' + cfg.symbol)()
 
     feat_sym = feat_sym_instance.get_feat_symbol(cfg)
-    aggr_sym = aggr_sym_instance.get_aggregation_symbol(cfg)
+    aggr_sym = aggr_sym_instance.get_train_aggregation_symbol(cfg)
 
     # set up class names
     num_classes = 31
@@ -149,7 +150,6 @@ def main():
                        ('feat_cache', ((interval, cfg.network.FGFA_FEAT_DIM,
                                                 np.ceil(max([v[0] for v in cfg.SCALES]) / feat_stride).astype(np.int),
                                                 np.ceil(max([v[1] for v in cfg.SCALES]) / feat_stride).astype(np.int))))]]
-    print(max_data_shape)
     provide_data = [[(k, v.shape) for k, v in zip(data_names, data[i])] for i in xrange(len(data))]
     provide_label = [None for _ in xrange(len(data))]
 
@@ -158,11 +158,11 @@ def main():
     feat_predictors = Predictor(feat_sym, data_names, label_names,
                           context=[mx.gpu(0)], max_data_shapes=max_data_shape,
                           provide_data=provide_data, provide_label=provide_label,
-                          arg_params=arg_params, aux_params=aux_params)
+                          arg_params=arg_params, aux_params=aux_params, inputs_need_grad=True)
     aggr_predictors = Predictor(aggr_sym, data_names, label_names,
                           context=[mx.gpu(0)], max_data_shapes=max_data_shape,
                           provide_data=provide_data, provide_label=provide_label,
-                          arg_params=arg_params, aux_params=aux_params)
+                          arg_params=arg_params, aux_params=aux_params, inputs_need_grad=True)
     nms = py_nms_wrapper(cfg.TEST.NMS)
 
 
@@ -177,7 +177,6 @@ def main():
     data_list = deque(maxlen=all_frame_interval)
     feat_list = deque(maxlen=all_frame_interval)
     image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
-    print(feat.shape)
     # append cfg.TEST.KEY_FRAME_INTERVAL padding images in the front (first frame)
     while len(data_list) < cfg.TEST.KEY_FRAME_INTERVAL:
         data_list.append(image)
@@ -197,7 +196,7 @@ def main():
 
             if len(data_list) < all_frame_interval - 1:
                 image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
-                print(feat.shape)
+                print 'feat', feat_predictors._mod.get_input_grads(False)
                 data_list.append(image)
                 feat_list.append(feat)
 
@@ -206,12 +205,22 @@ def main():
                 # main part of the loop
                 #################################################
                 image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
-                print(feat.shape)
+                print 'feat'
+                grad_arrays = feat_predictors._mod._curr_module._exec_group.grad_arrays
+                for grad_array in grad_arrays:
+                    print(grad_array[0].shape)
                 data_list.append(image)
                 feat_list.append(feat)
 
                 prepare_data(data_list, feat_list, data_batch)
-                pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg, aggr_feats=True)
+                pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
+                aggr_predictors._mod.forward(data_batch)
+                output_all = aggr_predictors._mod.get_outputs(merge_multi_context=False)
+                aggr_predictors._mod.backward()
+                print 'aggr'
+                grad_arrays = aggr_predictors._mod._curr_module._exec_group.grad_arrays
+                for grad_array in grad_arrays:
+                    print(grad_array[0].shape)
                 assert len(aggr_feat) == 1
 
                 data_batch.data[0][-2] = None
@@ -234,12 +243,14 @@ def main():
 
             end_counter = 0
             image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
-            print(feat.shape)
+            print 'feat', feat_predictors._mod.get_input_grads(False)
             while end_counter < cfg.TEST.KEY_FRAME_INTERVAL + 1:
                 data_list.append(image)
                 feat_list.append(feat)
                 prepare_data(data_list, feat_list, data_batch)
-                pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg, aggr_feats=True)
+                pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
+                aggr_predictors._mod.backward()
+                print 'aggr', aggr_predictors._mod._curr_module._exec_group.grad_arrays
                 assert len(aggr_feat) == 1
 
                 out_im = process_pred_result(classes, pred_result, num_classes, thresh, cfg, nms, all_boxes, file_idx, max_per_image, vis,

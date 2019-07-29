@@ -86,10 +86,11 @@ class FGFADetector:
         label_names = []
 
         t1 = time.time()
+        interval = cfg.TEST.KEY_FRAME_INTERVAL * 2 + 1
         data = [[mx.nd.array(data[i][name]) for name in data_names] for i in xrange(len(data))]
         max_data_shape = [[('data', (1, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),
-                           ('data_cache', (11, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),
-                           ('feat_cache', ((11, cfg.network.FGFA_FEAT_DIM,
+                           ('data_cache', (interval, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),
+                           ('feat_cache', ((interval, cfg.network.FGFA_FEAT_DIM,
                                                     np.ceil(max([v[0] for v in cfg.SCALES]) / feat_stride).astype(np.int),
                                                     np.ceil(max([v[1] for v in cfg.SCALES]) / feat_stride).astype(np.int))))]]
         provide_data = [[(k, v.shape) for k, v in zip(data_names, data[i])] for i in xrange(len(data))]
@@ -152,7 +153,7 @@ class FGFADetector:
                     feat_list.append(feat)
 
                     prepare_data(data_list, feat_list, data_batch)
-                    pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
+                    pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg, aggr_feats=True)
                     assert len(aggr_feat) == 1
                     if aggr_feat_output is not None:
                         aggr_feat_output.append(aggr_feat[0].asnumpy()[0])
@@ -178,7 +179,7 @@ class FGFADetector:
                     data_list.append(image)
                     feat_list.append(feat)
                     prepare_data(data_list, feat_list, data_batch)
-                    pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
+                    pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg, aggr_feats=True)
                     assert len(aggr_feat) == 1
                     if aggr_feat_output is not None:
                         aggr_feat_output.append(aggr_feat[0].asnumpy()[0])

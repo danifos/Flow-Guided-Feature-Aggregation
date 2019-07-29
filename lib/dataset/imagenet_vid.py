@@ -228,7 +228,7 @@ class ImageNetVID(IMDB):
             os.mkdir(result_dir)
 
         self.write_vid_results_multiprocess(detections)
-        info = self.do_python_eval_gen()
+        info = self.do_python_eval()
         return info
 
     def get_result_file_template(self, gpu_id):
@@ -357,7 +357,7 @@ class ImageNetVID(IMDB):
                             f.write('{:d} {:d} {:.4f} {:.2f} {:.2f} {:.2f} {:.2f}\n'.
                                     format(frame_ids[im_ind], cls_ind, dets[k, -1],
                                            dets[k, 0], dets[k, 1], dets[k, 2], dets[k, 3]))
-    
+
     def do_python_eval(self):
         """
         python evaluation wrapper
@@ -365,11 +365,11 @@ class ImageNetVID(IMDB):
         """
         info_str = ''
         annopath = os.path.join(self.data_path, 'Annotations', '{0!s}.xml')
-        imageset_file = os.path.join(self.data_path, 'ImageSets', self.image_set + '.txt')
+        imageset_file = os.path.join(self.data_path, 'ImageSets', self.image_set + '_eval.txt')
         annocache = os.path.join(self.cache_path, self.name + '_annotations.pkl')
 
         filename = self.get_result_file_template().format('all')
-        ap = vid_eval(filename, annopath, imageset_file, self.classes_map, annocache, ovthresh=0.5)
+        ap = vid_eval(None, [filename], annopath, imageset_file, self.classes_map, annocache, ovthresh=0.5)
         for cls_ind, cls in enumerate(self.classes):
             if cls == '__background__':
                 continue
@@ -393,7 +393,7 @@ class ImageNetVID(IMDB):
             for i in range(len(self.pattern)):
                 for j in range(self.frame_seg_len[i]):
                     f.write((self.pattern[i] % (self.frame_seg_id[i] + j)) + ' ' + str(self.frame_id[i] + j) + '\n')
-                    
+
         if gpu_number != None:
             filenames = []
             for i in range(gpu_number):
@@ -412,7 +412,6 @@ class ImageNetVID(IMDB):
         else:
             motion_ranges = [[0.0, 1.0]]
             area_ranges = [[0, 1e5 * 1e5]]
-
         ap = vid_eval_motion(multifiles, filenames, annopath, imageset_file, self.classes_map, annocache, self.motion_iou_path,
                              motion_ranges, area_ranges, ovthresh=0.5)
 

@@ -182,7 +182,7 @@ def vid_eval(multifiles, detpath, annopath, imageset_file, classname_map, annoca
                 bi=[np.max((bb[0],bbgt[0])), np.max((bb[1],bbgt[1])), np.min((bb[2],bbgt[2])), np.min((bb[3],bbgt[3]))]
                 iw=bi[2]-bi[0]+1
                 ih=bi[3]-bi[1]+1
-                if iw>0 and ih>0:            
+                if iw>0 and ih>0:
                     # compute overlap as area of intersection / area of union
                     ua = (bb[2] - bb[0] + 1.) * (bb[3] - bb[1] + 1.) + \
                            (bbgt[2] - bbgt[0] + 1.) * \

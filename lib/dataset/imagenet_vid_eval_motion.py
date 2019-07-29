@@ -214,6 +214,7 @@ def vid_eval_motion(multifiles, detpath, annopath, imageset_file, classname_map,
                 gt_detected = np.zeros(num_gt_obj)
 
                 gt_motion_iou = motion_iou[index]
+                # gt_motion_iou = [False for _ in range(num_gt_obj)]  # XXX
                 ig_gt_motion = [(gt_motion_iou[i] < motion_range[0]) | (gt_motion_iou[i] > motion_range[1]) for i in range(len(gt_motion_iou))]
                 gt_area = [(x[3] - x[1] + 1) * (x[2] - x[0] + 1) for x in gt_bboxes]
                 ig_gt_area = [(area < area_range[0]) | (area > area_range[1]) for area in gt_area]

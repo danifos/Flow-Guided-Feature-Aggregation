@@ -31,10 +31,12 @@ class Predictor(object):
     def __init__(self, symbol, data_names, label_names,
                  context=mx.gpu(), max_data_shapes=None,
                  provide_data=None, provide_label=None,
-                 arg_params=None, aux_params=None):
+                 arg_params=None, aux_params=None,
+                 inputs_need_grad=False):
         self._mod = MutableModule(symbol, data_names, label_names,
                                   context=context, max_data_shapes=max_data_shapes)
-        self._mod.bind(provide_data, provide_label, for_training=False)
+        self._mod.bind(provide_data, provide_label, for_training=inputs_need_grad,
+                       inputs_need_grad=inputs_need_grad)
         self._mod.init_params(arg_params=arg_params, aux_params=aux_params)
 
     def predict(self, data_batch):
@@ -140,14 +142,17 @@ def get_resnet_output(predictor, data_batch, data_names):
     return data_dict_all[0]['data'], feat.copy()
 
 
-def im_detect(predictor, data_batch, data_names, scales, cfg):
+def im_detect(predictor, data_batch, data_names, scales, cfg, aggr_feats=False):
     output_all = predictor.predict(data_batch)
     data_dict_all = [dict(zip(data_names, data_batch.data[i])) for i in xrange(len(data_batch.data))]
     scores_all = []
     pred_boxes_all = []
     aggr_feats_all = []
     for output, data_dict, scale in zip(output_all, data_dict_all, scales):
-        aggr_feats_all.append(output['_plus9_output'])
+        if 'blockgrad0_output' in output:
+            for i, key in enumerate(['_', 'rois_output', 'cls_prob_reshape_output', 'bbox_pred_reshape_output', '_plus{}_output'.format(cfg.TEST.KEY_FRAME_INTERVAL * 2 - 1)]):
+                output[key] = output['blockgrad{}_output'.format(i)]
+        aggr_feats_all.append(output['_plus{}_output'.format(cfg.TEST.KEY_FRAME_INTERVAL * 2 - 1)])
         if cfg.TEST.HAS_RPN:
             rois = output['rois_output'].asnumpy()[:, 1:]
         else:
@@ -166,7 +171,9 @@ def im_detect(predictor, data_batch, data_names, scales, cfg):
 
         scores_all.append(scores)
         pred_boxes_all.append(pred_boxes)
-    return zip(scores_all, pred_boxes_all, data_dict_all), aggr_feats_all
+    if aggr_feats:
+        return zip(scores_all, pred_boxes_all, data_dict_all), aggr_feats_all
+    return zip(scores_all, pred_boxes_all, data_dict_all)
 
 
 def im_batch_detect(predictor, data_batch, data_names, scales, cfg):
@@ -365,7 +372,7 @@ def pred_eval(gpu_id, feat_predictors, aggr_predictors, test_data, imdb, cfg, vi
 def run_dill_encode(payload):
     fun,args=dill.loads(payload)
     return fun(*args)
-    
+
 def apply_async(pool,fun,args):
     payload=dill.dumps((fun,args))
     return pool.apply_async(run_dill_encode,(payload,))
@@ -413,7 +420,7 @@ def pred_eval_multiprocess(gpu_num, key_predictors, cur_predictors, test_datas, 
             jobs.append(job)
         for job in jobs:
             res.append(job.get())
-        info_str = imdb.do_python_eval_gen(gpu_num)
+        info_str = imdb.do_python_eval()
     if logger:
         logger.info('evaluate detections: \n{}'.format(info_str))
 
