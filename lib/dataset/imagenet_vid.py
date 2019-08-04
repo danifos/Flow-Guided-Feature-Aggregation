@@ -368,6 +368,11 @@ class ImageNetVID(IMDB):
         imageset_file = os.path.join(self.data_path, 'ImageSets', self.image_set + '_eval.txt')
         annocache = os.path.join(self.cache_path, self.name + '_annotations.pkl')
 
+        with open(imageset_file, 'w') as f:
+            for i in range(len(self.pattern)):
+                for j in range(self.frame_seg_len[i]):
+                    f.write((self.pattern[i] % (self.frame_seg_id[i] + j)) + ' ' + str(self.frame_id[i] + j) + '\n')
+
         filename = self.get_result_file_template().format('all')
         ap = vid_eval(None, [filename], annopath, imageset_file, self.classes_map, annocache, ovthresh=0.5)
         for cls_ind, cls in enumerate(self.classes):

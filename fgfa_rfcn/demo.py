@@ -17,11 +17,16 @@ import logging
 import pprint
 import cv2
 from config.config import config as cfg
+cfg.TEST.KEY_FRAME_INTERVAL = 5
 from config.config import update_config
 from utils.image import resize, transform
 import numpy as np
 from collections import deque
 
+def preprocess(feat):
+    # feat[:, [847, 584, 946, 578, 544, 527, 694, 863, 1004, 749, 539, 910, 322, 964, 849], :, :] = 0
+    return
+    feat[:, [5, 19, 25, 39, 46, 84, 95, 104, 106, 112, 139, 152, 165, 168, 185, 226, 232, 267, 274, 284, 296, 322, 341, 346, 362, 366, 375, 383, 390, 397, 419, 429, 435, 440, 454, 461, 485, 492, 493, 511, 513, 527, 538, 539, 544, 555, 578, 584, 626, 631, 694, 749, 750, 831, 847, 849, 863, 877, 879, 896, 897, 910, 944, 946, 964, 1004, 1013], :, :] = 0
 
 # get config
 os.environ['PYTHONUNBUFFERED'] = '1'
@@ -75,7 +80,7 @@ def process_pred_result(classes, pred_result, num_classes, thresh, cfg, nms, all
 
             boxes_this_image = [[]] + [all_boxes[j][idx + delta] for j in range(1, num_classes)]
 
-            out_im = draw_all_detection(center_image, boxes_this_image, classes, scales[delta], cfg, threshold=0.3)
+            out_im = draw_all_detection(center_image, boxes_this_image, classes, scales[delta], cfg, threshold=0.5)
 
             return out_im
     return 0
@@ -97,6 +102,8 @@ def main():
 
     feat_sym = feat_sym_instance.get_feat_symbol(cfg)
     aggr_sym = aggr_sym_instance.get_aggregation_symbol(cfg)
+    # aggr_sym_feat = aggr_sym_instance.get_aggregation_symbol_feat(cfg)
+    # aggr_sym_rfcn = aggr_sym_instance.get_aggregation_symbol_rfcn(cfg)
 
     # set up class names
     num_classes = 31
@@ -112,8 +119,8 @@ def main():
     # load demo data
 
     # image_names = glob.glob(cur_path + '/../demo/ILSVRC2015_val_00007010/*.JPEG')
-    video_index = 'val_00022000'
-    image_names = glob.glob('/home/niruijie/ILSVRC2015/Data/VID/val/ILSVRC2015_{}/*.JPEG'.format(video_index))
+    video_index = 'val_00007010'
+    image_names = glob.glob('/home/user/ILSVRC2015/Data/VID/val/ILSVRC2015_{}/*.JPEG'.format(video_index))
     image_names.sort()
     # output_dir = cur_path + '/../demo/rfcn_fgfa/'
     output_dir = cur_path + '/../demo/{}/'.format(video_index)
@@ -163,6 +170,14 @@ def main():
                           context=[mx.gpu(0)], max_data_shapes=max_data_shape,
                           provide_data=provide_data, provide_label=provide_label,
                           arg_params=arg_params, aux_params=aux_params)
+#     aggr_predictors_feat = Predictor(aggr_sym_feat, data_names, label_names,
+#                           context=[mx.gpu(0)], max_data_shapes=max_data_shape,
+#                           provide_data=provide_data, provide_label=provide_label,
+#                           arg_params=arg_params, aux_params=aux_params)
+#     aggr_predictors_rfcn = Predictor(aggr_sym_rfcn, data_names, label_names,
+#                           context=[mx.gpu(0)], max_data_shapes=max_data_shape,
+#                           provide_data=provide_data, provide_label=provide_label,
+#                           arg_params=arg_params, aux_params=aux_params)
     nms = py_nms_wrapper(cfg.TEST.NMS)
 
 
@@ -177,10 +192,10 @@ def main():
     data_list = deque(maxlen=all_frame_interval)
     feat_list = deque(maxlen=all_frame_interval)
     image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
-    print(feat.shape)
     # append cfg.TEST.KEY_FRAME_INTERVAL padding images in the front (first frame)
     while len(data_list) < cfg.TEST.KEY_FRAME_INTERVAL:
         data_list.append(image)
+        preprocess(feat)
         feat_list.append(feat)
 
     vis = False
@@ -197,8 +212,8 @@ def main():
 
             if len(data_list) < all_frame_interval - 1:
                 image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
-                print(feat.shape)
                 data_list.append(image)
+                preprocess(feat)
                 feat_list.append(feat)
 
             else:
@@ -206,8 +221,8 @@ def main():
                 # main part of the loop
                 #################################################
                 image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
-                print(feat.shape)
                 data_list.append(image)
+                preprocess(feat)
                 feat_list.append(feat)
 
                 prepare_data(data_list, feat_list, data_batch)
@@ -234,9 +249,9 @@ def main():
 
             end_counter = 0
             image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
-            print(feat.shape)
             while end_counter < cfg.TEST.KEY_FRAME_INTERVAL + 1:
                 data_list.append(image)
+                preprocess(feat)
                 feat_list.append(feat)
                 prepare_data(data_list, feat_list, data_batch)
                 pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg, aggr_feats=True)
@@ -261,7 +276,7 @@ def main():
                 all_boxes[cls_ind + 1][frame_ind] = dets[keep, :]
         for idx in range(len(data)):
             boxes_this_image = [[]] + [all_boxes[j][idx] for j in range(1, num_classes)]
-            out_im = draw_all_detection(data[idx][0].asnumpy(), boxes_this_image, classes, scales[0], cfg, threshold=0.3)
+            out_im = draw_all_detection(data[idx][0].asnumpy(), boxes_this_image, classes, scales[0], cfg, threshold=0.5)
             save_image(output_dir, idx, out_im)
 
     print 'done'

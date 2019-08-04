@@ -26,6 +26,16 @@ from nms.seq_nms import seq_nms
 from utils.PrefetchingIter import PrefetchingIter
 from collections import deque
 
+def preprocess(feat, idx):
+    # feat[:, 847] += feat[:, 584] / 30.399262960129 * 51.18194472867024
+    # feat[:, 527] += feat[:, 847] / 51.18194472867024 * 36.46539179435066
+    # feat[:, 847] += feat[:, 849] / 36.95540977509428 * 51.18194472867024
+    ablated_units = []
+    for i in range(1024):
+        if i not in [843, 819, 658, 941, 356, 984, 337, 856, 710, 767]:
+            ablated_units.append(i)
+    feat[:, ablated_units, :, :] = 0
+    # feat[:, [5, 19, 25, 39, 46, 84, 95, 104, 106, 112, 139, 152, 165, 168, 185, 226, 232, 267, 274, 284, 296, 322, 341, 346, 362, 366, 375, 383, 390, 397, 419, 429, 435, 440, 454, 461, 485, 492, 493, 511, 513, 527, 538, 539, 544, 555, 578, 584, 626, 631, 694, 749, 750, 831, 847, 849, 863, 877, 879, 896, 897, 910, 944, 946, 964, 1004, 1013], :, :] = 0
 
 class Predictor(object):
     def __init__(self, symbol, data_names, label_names,
@@ -284,6 +294,7 @@ def pred_eval(gpu_id, feat_predictors, aggr_predictors, test_data, imdb, cfg, vi
             # append cfg.TEST.KEY_FRAME_INTERVAL+1 padding images in the front (first frame)
             while len(data_list) < cfg.TEST.KEY_FRAME_INTERVAL+1:
                 data_list.append(image)
+                preprocess(feat, idx)
                 feat_list.append(feat)
 
         #################################################
@@ -294,6 +305,7 @@ def pred_eval(gpu_id, feat_predictors, aggr_predictors, test_data, imdb, cfg, vi
             if len(data_list) < all_frame_interval - 1:
                 image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
                 data_list.append(image)
+                preprocess(feat, idx)
                 feat_list.append(feat)
 
             else:
@@ -301,6 +313,7 @@ def pred_eval(gpu_id, feat_predictors, aggr_predictors, test_data, imdb, cfg, vi
 
                 image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
                 data_list.append(image)
+                preprocess(feat, idx)
                 feat_list.append(feat)
                 prepare_data(data_list, feat_list, data_batch)
                 pred_result = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
@@ -336,6 +349,7 @@ def pred_eval(gpu_id, feat_predictors, aggr_predictors, test_data, imdb, cfg, vi
             image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
             while end_counter < cfg.TEST.KEY_FRAME_INTERVAL + 1:
                 data_list.append(image)
+                preprocess(feat, idx)
                 feat_list.append(feat)
                 prepare_data(data_list, feat_list, data_batch)
                 pred_result = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
@@ -505,7 +519,6 @@ def prepare_data(data_list, feat_list, data_batch):
     data_batch.provide_data[0][-2] = ('data_cache', concat_data.shape)
     data_batch.data[0][-1] = concat_feat
     data_batch.provide_data[0][-1] = ('feat_cache', concat_feat.shape)
-
 
 def process_pred_result(pred_result, imdb, thresh, cfg, nms, all_boxes, idx, max_per_image, vis, center_image, scales):
     for delta, (scores, boxes, data_dict) in enumerate(pred_result):

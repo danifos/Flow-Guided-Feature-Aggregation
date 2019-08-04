@@ -17,6 +17,7 @@ import logging
 import pprint
 import cv2
 from config.config import config as cfg
+cfg.TEST.KEY_FRAME_INTERVAL = 5
 from config.config import update_config
 from utils.image import resize, transform
 import numpy as np
