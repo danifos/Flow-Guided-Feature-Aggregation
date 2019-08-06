@@ -38,7 +38,7 @@ update_config(cur_path + '/../experiments/fgfa_rfcn/cfgs/fgfa_rfcn_vid_demo.yaml
 sys.path.insert(0, os.path.join(cur_path, '../external/mxnet/', cfg.MXNET_VERSION))
 import mxnet as mx
 import time
-from core.tester import im_detect, Predictor, get_resnet_output, prepare_data, draw_all_detection
+from core.tester import im_detect, im_detect_feat, im_detect_rfcn, Predictor, get_resnet_output, prepare_data, prepare_aggregation, draw_all_detection
 from symbols import *
 from nms.seq_nms import seq_nms
 from utils.load_model import load_param
@@ -93,6 +93,9 @@ def save_image(output_dir, count, out_im):
 def main():
     # get symbol
     pprint.pprint(cfg)
+    print '===================='
+    print 'SEQ_NMS:', cfg.TEST.SEQ_NMS
+    print '===================='
     cfg.symbol = 'resnet_v1_101_flownet_rfcn'
     model = '/../model/rfcn_fgfa_flownet_vid'
     all_frame_interval = cfg.TEST.KEY_FRAME_INTERVAL * 2 + 1
@@ -101,9 +104,11 @@ def main():
     aggr_sym_instance = eval(cfg.symbol + '.' + cfg.symbol)()
 
     feat_sym = feat_sym_instance.get_feat_symbol(cfg)
-    aggr_sym = aggr_sym_instance.get_aggregation_symbol(cfg)
-    # aggr_sym_feat = aggr_sym_instance.get_aggregation_symbol_feat(cfg)
-    # aggr_sym_rfcn = aggr_sym_instance.get_aggregation_symbol_rfcn(cfg)
+    # aggr_sym = aggr_sym_instance.get_aggregation_symbol(cfg)
+    # aggr_sym_feat = aggr_sym_instance.get_aggregation_symbol_feat(cfg, 3)
+    intervals = [1, 3, 5]
+    aggr_sym_feat_array = [aggr_sym_instance.get_aggregation_symbol_feat(cfg, i) for i in intervals]
+    aggr_sym_rfcn = aggr_sym_instance.get_aggregation_symbol_rfcn(cfg)
 
     # set up class names
     num_classes = 31
@@ -138,20 +143,23 @@ def main():
         im_info = np.array([[im_tensor.shape[2], im_tensor.shape[3], im_scale]], dtype=np.float32)
 
         feat_stride = float(cfg.network.RCNN_FEAT_STRIDE)
-        data.append({'data': im_tensor, 'im_info': im_info,  'data_cache': im_tensor,    'feat_cache': im_tensor})
+        data.append({'data': im_tensor, 'im_info': im_info, 'aggregated_conv_feat_cache':im_tensor, 'data_cache': im_tensor,    'feat_cache': im_tensor})
 
 
 
     # get predictor
 
     print 'get-predictor'
-    data_names = ['data', 'im_info', 'data_cache', 'feat_cache']
+    data_names = ['data', 'im_info', 'aggregated_conv_feat_cache', 'data_cache', 'feat_cache']
     label_names = []
 
     t1 = time.time()
     interval = cfg.TEST.KEY_FRAME_INTERVAL * 2 + 1
     data = [[mx.nd.array(data[i][name]) for name in data_names] for i in xrange(len(data))]
     max_data_shape = [[('data', (1, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),
+                       ('aggregated_conv_feat_cache', ((1, 1024,
+                                                np.ceil(max([v[0] for v in cfg.SCALES]) / feat_stride).astype(np.int),
+                                                np.ceil(max([v[1] for v in cfg.SCALES]) / feat_stride).astype(np.int)))),
                        ('data_cache', (interval, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),
                        ('feat_cache', ((interval, cfg.network.FGFA_FEAT_DIM,
                                                 np.ceil(max([v[0] for v in cfg.SCALES]) / feat_stride).astype(np.int),
@@ -166,18 +174,23 @@ def main():
                           context=[mx.gpu(0)], max_data_shapes=max_data_shape,
                           provide_data=provide_data, provide_label=provide_label,
                           arg_params=arg_params, aux_params=aux_params)
-    aggr_predictors = Predictor(aggr_sym, data_names, label_names,
-                          context=[mx.gpu(0)], max_data_shapes=max_data_shape,
-                          provide_data=provide_data, provide_label=provide_label,
-                          arg_params=arg_params, aux_params=aux_params)
+#     aggr_predictors = Predictor(aggr_sym, data_names, label_names,
+#                           context=[mx.gpu(0)], max_data_shapes=max_data_shape,
+#                           provide_data=provide_data, provide_label=provide_label,
+#                           arg_params=arg_params, aux_params=aux_params)
 #     aggr_predictors_feat = Predictor(aggr_sym_feat, data_names, label_names,
 #                           context=[mx.gpu(0)], max_data_shapes=max_data_shape,
 #                           provide_data=provide_data, provide_label=provide_label,
 #                           arg_params=arg_params, aux_params=aux_params)
-#     aggr_predictors_rfcn = Predictor(aggr_sym_rfcn, data_names, label_names,
-#                           context=[mx.gpu(0)], max_data_shapes=max_data_shape,
-#                           provide_data=provide_data, provide_label=provide_label,
-#                           arg_params=arg_params, aux_params=aux_params)
+    aggr_predictors_feat_array = [Predictor(aggr_sym_feat, data_names, label_names,
+                          context=[mx.gpu(0)], max_data_shapes=max_data_shape,
+                          provide_data=provide_data, provide_label=provide_label,
+                          arg_params=arg_params, aux_params=aux_params) \
+                                  for aggr_sym_feat in aggr_sym_feat_array]
+    aggr_predictors_rfcn = Predictor(aggr_sym_rfcn, data_names, label_names,
+                          context=[mx.gpu(0)], max_data_shapes=max_data_shape,
+                          provide_data=provide_data, provide_label=provide_label,
+                          arg_params=arg_params, aux_params=aux_params)
     nms = py_nms_wrapper(cfg.TEST.NMS)
 
 
@@ -226,9 +239,12 @@ def main():
                 feat_list.append(feat)
 
                 prepare_data(data_list, feat_list, data_batch)
-                pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg, aggr_feats=True)
-                assert len(aggr_feat) == 1
-
+                aggr_feat = im_detect_feat(aggr_predictors_feat_array, data_batch, data_names, scales, cfg, intervals)
+                aggr_feat = list(aggr_feat)[2]
+                prepare_aggregation(aggr_feat, data_batch)
+                pred_result = im_detect_rfcn(aggr_predictors_rfcn, data_batch, data_names, scales, cfg)
+                data_batch.data[0][-3] = None
+                data_batch.provide_data[0][-3] = ('aggregated_conv_feat_cache', None)
                 data_batch.data[0][-2] = None
                 data_batch.provide_data[0][-2] = ('data_cache', None)
                 data_batch.data[0][-1] = None
@@ -254,8 +270,10 @@ def main():
                 preprocess(feat)
                 feat_list.append(feat)
                 prepare_data(data_list, feat_list, data_batch)
-                pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg, aggr_feats=True)
-                assert len(aggr_feat) == 1
+                aggr_feat = im_detect_feat(aggr_predictors_feat_array, data_batch, data_names, scales, cfg, intervals)
+                aggr_feat = list(aggr_feat)[2]
+                prepare_aggregation(aggr_feat, data_batch)
+                pred_result = im_detect_rfcn(aggr_predictors_rfcn, data_batch, data_names, scales, cfg)
 
                 out_im = process_pred_result(classes, pred_result, num_classes, thresh, cfg, nms, all_boxes, file_idx, max_per_image, vis,
                                     data_list[cfg.TEST.KEY_FRAME_INTERVAL].asnumpy(), scales)

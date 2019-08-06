@@ -30,6 +30,7 @@ def preprocess(feat, idx):
     # feat[:, 847] += feat[:, 584] / 30.399262960129 * 51.18194472867024
     # feat[:, 527] += feat[:, 847] / 51.18194472867024 * 36.46539179435066
     # feat[:, 847] += feat[:, 849] / 36.95540977509428 * 51.18194472867024
+    return
     ablated_units = []
     for i in range(1024):
         if i not in [843, 819, 658, 941, 356, 984, 337, 856, 710, 767]:
@@ -185,6 +186,43 @@ def im_detect(predictor, data_batch, data_names, scales, cfg, aggr_feats=False):
         return zip(scores_all, pred_boxes_all, data_dict_all), aggr_feats_all
     return zip(scores_all, pred_boxes_all, data_dict_all)
 
+def im_detect_feat(predictors, data_batch, data_names, scales, cfg, intervals):
+    plus_index = -1
+    for predictor, interval in zip(predictors, intervals):
+        output_all = predictor.predict(data_batch)
+        data_dict_all = [dict(zip(data_names, data_batch.data[i])) for i in xrange(len(data_batch.data))]
+        aggr_feats_all = []
+        for output, data_dict, scale in zip(output_all, data_dict_all, scales):
+            plus_index += interval * 2
+            aggr_feats_all.append(output['_plus{}_output'.format(plus_index)])
+        yield aggr_feats_all
+
+def im_detect_rfcn(predictor, data_batch, data_names, scales, cfg):
+    output_all = predictor.predict(data_batch)
+    data_dict_all = [dict(zip(data_names, data_batch.data[i])) for i in xrange(len(data_batch.data))]
+    scores_all = []
+    pred_boxes_all = []
+    aggr_feats_all = []
+    for output, data_dict, scale in zip(output_all, data_dict_all, scales):
+        if cfg.TEST.HAS_RPN:
+            rois = output['rois_output'].asnumpy()[:, 1:]
+        else:
+            rois = data_dict['rois'].asnumpy().reshape((-1, 5))[:, 1:]
+        im_shape = data_dict['data'].shape
+
+        # save output
+        scores = output['cls_prob_reshape_output'].asnumpy()[0]
+        bbox_deltas = output['bbox_pred_reshape_output'].asnumpy()[0]
+        # post processing
+        pred_boxes = bbox_pred(rois, bbox_deltas)
+        pred_boxes = clip_boxes(pred_boxes, im_shape[-2:])
+
+        # we used scaled image & roi to train, so it is necessary to transform them back
+        pred_boxes = pred_boxes / scale
+
+        scores_all.append(scores)
+        pred_boxes_all.append(pred_boxes)
+    return zip(scores_all, pred_boxes_all, data_dict_all)
 
 def im_batch_detect(predictor, data_batch, data_names, scales, cfg):
     output_all = predictor.predict(data_batch)
@@ -519,6 +557,10 @@ def prepare_data(data_list, feat_list, data_batch):
     data_batch.provide_data[0][-2] = ('data_cache', concat_data.shape)
     data_batch.data[0][-1] = concat_feat
     data_batch.provide_data[0][-1] = ('feat_cache', concat_feat.shape)
+
+def prepare_aggregation(aggregated_conv_feat, data_batch):
+    data_batch.data[0][-3] = aggregated_conv_feat[0]
+    data_batch.provide_data[0][-3] = ('aggregated_conv_feat_cache', aggregated_conv_feat[0].shape)
 
 def process_pred_result(pred_result, imdb, thresh, cfg, nms, all_boxes, idx, max_per_image, vis, center_image, scales):
     for delta, (scores, boxes, data_dict) in enumerate(pred_result):
