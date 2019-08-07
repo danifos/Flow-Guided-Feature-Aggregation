@@ -240,7 +240,7 @@ def main():
 
                 prepare_data(data_list, feat_list, data_batch)
                 aggr_feat = im_detect_feat(aggr_predictors_feat_array, data_batch, data_names, scales, cfg, intervals)
-                aggr_feat = list(aggr_feat)[2]
+                aggr_feat = list(aggr_feat)[-1]
                 prepare_aggregation(aggr_feat, data_batch)
                 pred_result = im_detect_rfcn(aggr_predictors_rfcn, data_batch, data_names, scales, cfg)
                 data_batch.data[0][-3] = None
@@ -271,7 +271,7 @@ def main():
                 feat_list.append(feat)
                 prepare_data(data_list, feat_list, data_batch)
                 aggr_feat = im_detect_feat(aggr_predictors_feat_array, data_batch, data_names, scales, cfg, intervals)
-                aggr_feat = list(aggr_feat)[2]
+                aggr_feat = list(aggr_feat)[-1]
                 prepare_aggregation(aggr_feat, data_batch)
                 pred_result = im_detect_rfcn(aggr_predictors_rfcn, data_batch, data_names, scales, cfg)
 

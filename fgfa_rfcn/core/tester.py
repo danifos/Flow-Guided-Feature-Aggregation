@@ -25,6 +25,7 @@ from nms.nms import py_nms_wrapper, cpu_nms_wrapper, gpu_nms_wrapper
 from nms.seq_nms import seq_nms
 from utils.PrefetchingIter import PrefetchingIter
 from collections import deque
+from choose_feature import get_feature
 
 def preprocess(feat, idx):
     # feat[:, 847] += feat[:, 584] / 30.399262960129 * 51.18194472867024
@@ -263,7 +264,7 @@ def pred_eval_seqnms(gpu_id,imdb):
         res=[all_boxes, frame_ids]
         imdb.evaluate_detections_multiprocess_seqnms(res, gpu_id)
 
-def pred_eval(gpu_id, feat_predictors, aggr_predictors, test_data, imdb, cfg, vis=False, thresh=1e-3, logger=None, ignore_cache=True):
+def pred_eval(gpu_id, feat_predictors, aggr_predictors_feat_array, aggr_predictors_rfcn, test_data, imdb, cfg, vis=False, thresh=1e-3, logger=None, ignore_cache=True):
     """
     wrapper for calculating offline validation for faster data analysis
     in this example, all threshold are set by hand
@@ -354,7 +355,12 @@ def pred_eval(gpu_id, feat_predictors, aggr_predictors, test_data, imdb, cfg, vi
                 preprocess(feat, idx)
                 feat_list.append(feat)
                 prepare_data(data_list, feat_list, data_batch)
-                pred_result = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
+                aggr_feat = im_detect_feat(aggr_predictors_feat_array, data_batch, data_names, scales, cfg, cfg.TEST.INTERVALS)
+                # aggr_feat = list(aggr_feat)[-1]
+                aggr_feat = get_feature([f[0].asnumpy() for f in aggr_feat], [int(x) for x in im_info[0][0,:2]])
+                aggr_feat = [mx.nd.array(aggr_feat)]
+                prepare_aggregation(aggr_feat, data_batch)
+                pred_result = im_detect_rfcn(aggr_predictors_rfcn, data_batch, data_names, scales, cfg)
 
                 roidb_offset += 1
                 frame_ids[idx] = roidb_frame_ids[roidb_idx] + roidb_offset
@@ -390,7 +396,12 @@ def pred_eval(gpu_id, feat_predictors, aggr_predictors, test_data, imdb, cfg, vi
                 preprocess(feat, idx)
                 feat_list.append(feat)
                 prepare_data(data_list, feat_list, data_batch)
-                pred_result = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
+                aggr_feat = im_detect_feat(aggr_predictors_feat_array, data_batch, data_names, scales, cfg, cfg.TEST.INTERVALS)
+                # aggr_feat = list(aggr_feat)[-1]
+                aggr_feat = get_feature([f[0].asnumpy() for f in aggr_feat], [int(x) for x in im_info[0][0,:2]])
+                aggr_feat = [mx.nd.array(aggr_feat)]
+                prepare_aggregation(aggr_feat, data_batch)
+                pred_result = im_detect_rfcn(aggr_predictors_rfcn, data_batch, data_names, scales, cfg)
 
                 roidb_offset += 1
                 frame_ids[idx] = roidb_frame_ids[roidb_idx] + roidb_offset
@@ -429,11 +440,11 @@ def apply_async(pool,fun,args):
     payload=dill.dumps((fun,args))
     return pool.apply_async(run_dill_encode,(payload,))
 
-def pred_eval_multiprocess(gpu_num, key_predictors, cur_predictors, test_datas, imdb, cfg, vis=False, thresh=1e-3, logger=None, ignore_cache=True):
+def pred_eval_multiprocess(gpu_num, key_predictors, cur_predictors_feat, cur_predictors_rfcn, test_datas, imdb, cfg, vis=False, thresh=1e-3, logger=None, ignore_cache=True):
 
     if cfg.TEST.SEQ_NMS==False:
         if gpu_num == 1:
-            res = [pred_eval(0, key_predictors[0], cur_predictors[0], test_datas[0], imdb, cfg, vis, thresh, logger,
+            res = [pred_eval(0, key_predictors[0], cur_predictors_feat, cur_predictors_rfcn[0], test_datas[0], imdb, cfg, vis, thresh, logger,
                              ignore_cache), ]
         else:
             from multiprocessing.pool import ThreadPool as Pool

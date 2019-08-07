@@ -35,7 +35,7 @@ def get_predictor(sym, sym_instance, cfg, arg_params, aux_params, test_data, ctx
     data_names = [k[0] for k in test_data.provide_data_single]
     label_names = None
     max_data_shape = [[('data', (1, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),
-                       ('data_cache', (19, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),
+                       ('data_cache', (cfg.TEST.KEY_FRAME_INTERVAL * 2 + 1, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),
                        ]]
 
     # create predictor
@@ -61,7 +61,10 @@ def test_rcnn(cfg, dataset, image_set, root_path, dataset_path, motion_iou_path,
     aggr_sym_instance = eval(cfg.symbol + '.' + cfg.symbol)()
 
     feat_sym = feat_sym_instance.get_feat_symbol(cfg)
-    aggr_sym = aggr_sym_instance.get_aggregation_symbol(cfg)
+    # aggr_sym = aggr_sym_instance.get_aggregation_symbol(cfg)
+    # aggr_sym_feat = aggr_sym_instance.get_aggregation_symbol_feat(cfg, cfg.TEST.KEY_FRAME_INTERVAL)
+    aggr_sym_feat_array = [aggr_sym_instance.get_aggregation_symbol_feat(cfg, interval) for interval in cfg.TEST.INTERVALS]
+    aggr_sym_rfcn = aggr_sym_instance.get_aggregation_symbol_rfcn(cfg)
 
     imdb = eval(dataset)(image_set, root_path, dataset_path, motion_iou_path, result_path=output_path, enable_detailed_eval=enable_detailed_eval)
     roidb = imdb.gt_roidb()
@@ -84,7 +87,9 @@ def test_rcnn(cfg, dataset, image_set, root_path, dataset_path, motion_iou_path,
 
     # create predictor
     feat_predictors = [get_predictor(feat_sym, feat_sym_instance, cfg, arg_params, aux_params, test_datas[i], [ctx[i]]) for i in range(gpu_num)]
-    aggr_predictors = [get_predictor(aggr_sym, aggr_sym_instance, cfg, arg_params, aux_params, test_datas[i], [ctx[i]]) for i in range(gpu_num)]
+    # aggr_predictors = [get_predictor(aggr_sym, aggr_sym_instance, cfg, arg_params, aux_params, test_datas[i], [ctx[i]]) for i in range(gpu_num)]
+    aggr_predictors_feat_array = [get_predictor(aggr_sym_feat, aggr_sym_instance, cfg, arg_params, aux_params, test_datas[i], [ctx[i]]) for i in range(gpu_num) for aggr_sym_feat in aggr_sym_feat_array]
+    aggr_predictors_rfcn = [get_predictor(aggr_sym_rfcn, aggr_sym_instance, cfg, arg_params, aux_params, test_datas[i], [ctx[i]]) for i in range(gpu_num)]
 
     # start detection
-    pred_eval_multiprocess(gpu_num, feat_predictors, aggr_predictors, test_datas, imdb, cfg, vis=vis, ignore_cache=ignore_cache, thresh=thresh, logger=logger)
+    pred_eval_multiprocess(gpu_num, feat_predictors, aggr_predictors_feat_array, aggr_predictors_rfcn, test_datas, imdb, cfg, vis=vis, ignore_cache=ignore_cache, thresh=thresh, logger=logger)

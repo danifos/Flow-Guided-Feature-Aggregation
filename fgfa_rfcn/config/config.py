@@ -149,7 +149,8 @@ config.TEST.NMS = 0.3
 config.TEST.max_per_image = 300
 
 #
-config.TEST.KEY_FRAME_INTERVAL = 9
+config.TEST.KEY_FRAME_INTERVAL = 5
+config.TEST.INTERVALS = [1, 3, 5]
 config.TEST.SEQ_NMS = False
 
 

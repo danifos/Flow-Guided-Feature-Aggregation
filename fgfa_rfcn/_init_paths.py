@@ -5,6 +5,7 @@
 # Written by Xizhou Zhu
 # --------------------------------------------------------
 
+import os
 import os.path as osp
 import sys
 
@@ -16,3 +17,5 @@ this_dir = osp.dirname(__file__)
 
 lib_path = osp.join(this_dir, '..', 'lib')
 add_path(lib_path)
+
+sys.path.insert(0, os.readlink(osp.join(this_dir, 'video_dissect')))
