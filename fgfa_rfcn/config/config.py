@@ -150,8 +150,9 @@ config.TEST.max_per_image = 300
 
 #
 config.TEST.KEY_FRAME_INTERVAL = 9
-config.TEST.INTERVALS = [1, 5, 9]
+config.TEST.INTERVALS = [9]
 config.TEST.SEQ_NMS = False
+config.TEST.SELECT_FEATURES = False
 
 
 # Test Model Epoch

@@ -358,9 +358,11 @@ def pred_eval(gpu_id, feat_predictors, aggr_predictors_feat_array, aggr_predicto
                 feat_list.append(feat)
                 prepare_data(data_list, feat_list, data_batch)
                 aggr_feat = im_detect_feat(aggr_predictors_feat_array, data_batch, data_names, scales, cfg, cfg.TEST.INTERVALS)
-                # aggr_feat = list(aggr_feat)[-1]
-                aggr_feat = get_feature([f[0].asnumpy() for f in aggr_feat], [int(x) for x in im_info[0][0,:2]])
-                aggr_feat = [mx.nd.array(aggr_feat)]
+                if cfg.TEST.SELECT_FEATURES:
+                    aggr_feat = get_feature([f[0].asnumpy() for f in aggr_feat], [int(x) for x in im_info[0][0,:2]])
+                    aggr_feat = [mx.nd.array(aggr_feat)]
+                else:
+                    aggr_feat = list(aggr_feat)[-1]
                 prepare_aggregation(aggr_feat, data_batch)
                 pred_result = im_detect_rfcn(aggr_predictors_rfcn, data_batch, data_names, scales, cfg)
 
@@ -399,9 +401,11 @@ def pred_eval(gpu_id, feat_predictors, aggr_predictors_feat_array, aggr_predicto
                 feat_list.append(feat)
                 prepare_data(data_list, feat_list, data_batch)
                 aggr_feat = im_detect_feat(aggr_predictors_feat_array, data_batch, data_names, scales, cfg, cfg.TEST.INTERVALS)
-                # aggr_feat = list(aggr_feat)[-1]
-                aggr_feat = get_feature([f[0].asnumpy() for f in aggr_feat], [int(x) for x in im_info[0][0,:2]])
-                aggr_feat = [mx.nd.array(aggr_feat)]
+                if cfg.TEST.SELECT_FEATURES:
+                    aggr_feat = get_feature([f[0].asnumpy() for f in aggr_feat], [int(x) for x in im_info[0][0,:2]])
+                    aggr_feat = [mx.nd.array(aggr_feat)]
+                else:
+                    aggr_feat = list(aggr_feat)[-1]
                 prepare_aggregation(aggr_feat, data_batch)
                 pred_result = im_detect_rfcn(aggr_predictors_rfcn, data_batch, data_names, scales, cfg)
 

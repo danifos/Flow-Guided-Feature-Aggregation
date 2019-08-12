@@ -17,7 +17,6 @@ import logging
 import pprint
 import cv2
 from config.config import config as cfg
-cfg.TEST.KEY_FRAME_INTERVAL = 5
 from config.config import update_config
 from utils.image import resize, transform
 import numpy as np
@@ -34,7 +33,7 @@ update_config(cur_path + '/../experiments/fgfa_rfcn/cfgs/fgfa_rfcn_vid_demo.yaml
 sys.path.insert(0, os.path.join(cur_path, '../external/mxnet/', cfg.MXNET_VERSION))
 import mxnet as mx
 import time
-from core.tester import im_detect, Predictor, get_resnet_output, prepare_data, draw_all_detection
+from core.tester import im_detect, im_detect_feat, im_detect_rfcn, Predictor, get_resnet_output, prepare_data, prepare_aggregation, draw_all_detection
 from symbols import *
 from utils.load_model import load_param
 from utils.tictoc import tic, toc
@@ -52,7 +51,7 @@ class FGFADetector:
         feat_sym_instance = eval(cfg.symbol + '.' + cfg.symbol)()
         aggr_sym_instance = eval(cfg.symbol + '.' + cfg.symbol)()
 
-        feat_sym = feat_sym_instance.get_feat_symbol(cfg)
+        feat_sym = feat_sym_instance.get_feat_symbol_origin(cfg)
         aggr_sym = aggr_sym_instance.get_aggregation_symbol(cfg)
 
         self.model = model
@@ -78,7 +77,7 @@ class FGFADetector:
             im_info = np.array([[im_tensor.shape[2], im_tensor.shape[3], im_scale]], dtype=np.float32)
 
             feat_stride = float(cfg.network.RCNN_FEAT_STRIDE)
-            data.append({'data': im_tensor, 'im_info': im_info,  'data_cache': im_tensor,    'feat_cache': im_tensor})
+            data.append({'data': im_tensor, 'im_info': im_info, 'data_cache': im_tensor,    'feat_cache': im_tensor})
 
 
         # get predictor

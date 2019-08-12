@@ -1023,6 +1023,24 @@ class resnet_v1_101_flownet_rfcn(Symbol):
         self.sym = group
         return group
 
+    def get_feat_symbol_origin(self, cfg):
+        # config alias for convenient
+        num_classes = cfg.dataset.NUM_CLASSES
+
+        data = mx.sym.Variable(name="data")
+        im_info = mx.sym.Variable(name="im_info")
+        data_cache = mx.sym.Variable(name="data_cache")
+        feat_cache = mx.sym.Variable(name="feat_cache")
+
+        # shared convolutional layers
+        conv_feat = self.get_resnet_v1(data)
+        embed_feat = self.get_embednet(conv_feat)
+        conv_embed = mx.sym.Concat(conv_feat, embed_feat, name="conv_embed")
+
+        group = mx.sym.Group([conv_embed, im_info, data_cache, feat_cache])
+        self.sym = group
+        return group
+
     def get_feat_symbol(self, cfg):
         # config alias for convenient
         num_classes = cfg.dataset.NUM_CLASSES
@@ -1053,7 +1071,6 @@ class resnet_v1_101_flownet_rfcn(Symbol):
         im_info = mx.sym.Variable(name="im_info")
         data_cache = mx.sym.Variable(name="data_cache")         # data_cache contains data_range images
         feat_cache = mx.sym.Variable(name="feat_cache")         # feat_cache contains the data_range feature maps of the images
-        aggregated_conv_feat = mx.sym.Variable(name='aggregated_conv_feat_cache')
 
         # make data_range copies of the center frame to pass through FlowNet
         cur_data = mx.symbol.slice_axis(data_cache, axis=0, begin=cfg.TEST.KEY_FRAME_INTERVAL, end=cfg.TEST.KEY_FRAME_INTERVAL+1)
