@@ -39,6 +39,34 @@ from utils.load_model import load_param
 from utils.tictoc import tic, toc
 
 
+class VideoLoader:
+    def __init__(self, images):
+        self.images = images
+
+        # Load one frame first
+        self.data_template = self.__getitem__(0)
+
+    def _load_frame(self, idx):
+        im = self.images_names[idx]
+        target_size = cfg.SCALES[0][0]
+        max_size = cfg.SCALES[0][1]
+        im, im_scale = resize(im, target_size, max_size, stride=cfg.network.IMAGE_STRIDE)
+        im_tensor = transform(im, cfg.network.PIXEL_MEANS)
+        im_info = np.array([[im_tensor.shape[2], im_tensor.shape[3], im_scale]], dtype=np.float32)
+
+        feat_stride = float(cfg.network.RCNN_FEAT_STRIDE)
+        return mx.nd.array(im_tensor), mx.nd.array(im_info)
+
+    def __getitem__(self, index):
+        if index == 0 and hasattr(self, 'data_template'):
+            return self.data_template
+        im_tensor, im_info = self._load_frame(index)
+        return [im_tensor, im_info, im_tensor, im_tensor, im_tensor]
+
+    def __len__(self):
+        return len(self.images_names)
+
+
 class FGFADetector:
 
     def __init__(self):
@@ -68,16 +96,17 @@ class FGFADetector:
         aggr_sym = self.aggr_sym
 
         # load video data
-        data = []
-        for im in images:
-            target_size = cfg.SCALES[0][0]
-            max_size = cfg.SCALES[0][1]
-            im, im_scale = resize(im, target_size, max_size, stride=cfg.network.IMAGE_STRIDE)
-            im_tensor = transform(im, cfg.network.PIXEL_MEANS)
-            im_info = np.array([[im_tensor.shape[2], im_tensor.shape[3], im_scale]], dtype=np.float32)
+        # data = []
+        # for im in images:
+        #     target_size = cfg.SCALES[0][0]
+        #     max_size = cfg.SCALES[0][1]
+        #     im, im_scale = resize(im, target_size, max_size, stride=cfg.network.IMAGE_STRIDE)
+        #     im_tensor = transform(im, cfg.network.PIXEL_MEANS)
+        #     im_info = np.array([[im_tensor.shape[2], im_tensor.shape[3], im_scale]], dtype=np.float32)
 
-            feat_stride = float(cfg.network.RCNN_FEAT_STRIDE)
-            data.append({'data': im_tensor, 'im_info': im_info, 'data_cache': im_tensor,    'feat_cache': im_tensor})
+        #     feat_stride = float(cfg.network.RCNN_FEAT_STRIDE)
+        #     data.append({'data': im_tensor, 'im_info': im_info, 'data_cache': im_tensor,    'feat_cache': im_tensor})
+        feat_stride = float(cfg.network.RCNN_FEAT_STRIDE)
 
 
         # get predictor
@@ -87,13 +116,14 @@ class FGFADetector:
 
         t1 = time.time()
         interval = cfg.TEST.KEY_FRAME_INTERVAL * 2 + 1
-        data = [[mx.nd.array(data[i][name]) for name in data_names] for i in xrange(len(data))]
+        # data = [[mx.nd.array(data[i][name]) for name in data_names] for i in xrange(len(data))]
+        data = VideoLoader(images)
         max_data_shape = [[('data', (1, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),
                            ('data_cache', (interval, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),
                            ('feat_cache', ((interval, cfg.network.FGFA_FEAT_DIM,
                                                     np.ceil(max([v[0] for v in cfg.SCALES]) / feat_stride).astype(np.int),
                                                     np.ceil(max([v[1] for v in cfg.SCALES]) / feat_stride).astype(np.int))))]]
-        provide_data = [[(k, v.shape) for k, v in zip(data_names, data[i])] for i in xrange(len(data))]
+        provide_data = [[(k, v.shape) for k, v in zip(data_names, data[0])] for _ in xrange(len(data))]
         provide_label = [None for _ in xrange(len(data))]
 
         arg_params, aux_params = load_param(cur_path + model, 0, process=True)
