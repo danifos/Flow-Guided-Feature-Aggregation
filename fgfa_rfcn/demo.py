@@ -90,6 +90,35 @@ def save_image(output_dir, count, out_im):
     filename = '{:04d}.JPEG'.format(count)
     cv2.imwrite(output_dir + filename, out_im)
 
+class VideoLoader:
+    def __init__(self, images_names):
+        self.images_names = images_names
+
+        # Load one frame first
+        self.data_template = self.__getitem__(0)
+
+    def _load_frame(self, idx):
+        im_name = self.images_names[idx]
+        assert os.path.exists(im_name), ('%s does not exist'.format(im_name))
+        im = cv2.imread(im_name, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
+        target_size = cfg.SCALES[0][0]
+        max_size = cfg.SCALES[0][1]
+        im, im_scale = resize(im, target_size, max_size, stride=cfg.network.IMAGE_STRIDE)
+        im_tensor = transform(im, cfg.network.PIXEL_MEANS)
+        im_info = np.array([[im_tensor.shape[2], im_tensor.shape[3], im_scale]], dtype=np.float32)
+
+        feat_stride = float(cfg.network.RCNN_FEAT_STRIDE)
+        return mx.nd.array(im_tensor), mx.nd.array(im_info)
+
+    def __getitem__(self, index):
+        if index == 0 and hasattr(self, 'data_template'):
+            return self.data_template
+        im_tensor, im_info = self._load_frame(index)
+        return [im_tensor, im_info, im_tensor, im_tensor, im_tensor]
+
+    def __len__(self):
+        return len(self.images_names)
+
 def main():
     # get symbol
     pprint.pprint(cfg)
@@ -132,18 +161,19 @@ def main():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    data = []
-    for im_name in image_names:
-        assert os.path.exists(im_name), ('%s does not exist'.format(im_name))
-        im = cv2.imread(im_name, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
-        target_size = cfg.SCALES[0][0]
-        max_size = cfg.SCALES[0][1]
-        im, im_scale = resize(im, target_size, max_size, stride=cfg.network.IMAGE_STRIDE)
-        im_tensor = transform(im, cfg.network.PIXEL_MEANS)
-        im_info = np.array([[im_tensor.shape[2], im_tensor.shape[3], im_scale]], dtype=np.float32)
+    # data = []
+    # for im_name in image_names:
+    #     assert os.path.exists(im_name), ('%s does not exist'.format(im_name))
+    #     im = cv2.imread(im_name, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
+    #     target_size = cfg.SCALES[0][0]
+    #     max_size = cfg.SCALES[0][1]
+    #     im, im_scale = resize(im, target_size, max_size, stride=cfg.network.IMAGE_STRIDE)
+    #     im_tensor = transform(im, cfg.network.PIXEL_MEANS)
+    #     im_info = np.array([[im_tensor.shape[2], im_tensor.shape[3], im_scale]], dtype=np.float32)
 
-        feat_stride = float(cfg.network.RCNN_FEAT_STRIDE)
-        data.append({'data': im_tensor, 'im_info': im_info, 'aggregated_conv_feat_cache':im_tensor, 'data_cache': im_tensor,    'feat_cache': im_tensor})
+    #     feat_stride = float(cfg.network.RCNN_FEAT_STRIDE)
+    #     data.append({'data': im_tensor, 'im_info': im_info, 'aggregated_conv_feat_cache':im_tensor, 'data_cache': im_tensor,    'feat_cache': im_tensor})
+    feat_stride = float(cfg.network.RCNN_FEAT_STRIDE)
 
 
 
@@ -155,7 +185,8 @@ def main():
 
     t1 = time.time()
     interval = cfg.TEST.KEY_FRAME_INTERVAL * 2 + 1
-    data = [[mx.nd.array(data[i][name]) for name in data_names] for i in xrange(len(data))]
+    # data = [[mx.nd.array(data[i][name]) for name in data_names] for i in xrange(len(data))]
+    data = VideoLoader(image_names)
     max_data_shape = [[('data', (1, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),
                        ('aggregated_conv_feat_cache', ((1, 1024,
                                                 np.ceil(max([v[0] for v in cfg.SCALES]) / feat_stride).astype(np.int),
@@ -164,8 +195,7 @@ def main():
                        ('feat_cache', ((interval, cfg.network.FGFA_FEAT_DIM,
                                                 np.ceil(max([v[0] for v in cfg.SCALES]) / feat_stride).astype(np.int),
                                                 np.ceil(max([v[1] for v in cfg.SCALES]) / feat_stride).astype(np.int))))]]
-    print(max_data_shape)
-    provide_data = [[(k, v.shape) for k, v in zip(data_names, data[i])] for i in xrange(len(data))]
+    provide_data = [[(k, v.shape) for k, v in zip(data_names, data[0])] for _ in xrange(len(data))]
     provide_label = [None for _ in xrange(len(data))]
 
     arg_params, aux_params = load_param(cur_path + model, 0, process=True)
@@ -214,6 +244,7 @@ def main():
     vis = False
     file_idx = 0
     thresh = 1e-3
+    load_end = time.time()
     for idx, element in enumerate(data):
 
         data_batch = mx.io.DataBatch(data=[element], label=[], pad=0, index=idx,
@@ -284,6 +315,7 @@ def main():
                 print 'testing {} {:.4f}s'.format(str(file_idx)+'.JPEG', total_time / (file_idx+1))
                 file_idx += 1
                 end_counter+=1
+        load_end = time.time()
 
     if(cfg.TEST.SEQ_NMS):
         video = [all_boxes[j][:] for j in range(1, num_classes)]
