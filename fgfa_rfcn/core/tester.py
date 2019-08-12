@@ -25,7 +25,7 @@ from nms.nms import py_nms_wrapper, cpu_nms_wrapper, gpu_nms_wrapper
 from nms.seq_nms import seq_nms
 from utils.PrefetchingIter import PrefetchingIter
 from collections import deque
-from choose_feature import get_feature
+from choose_feature import get_feature, get_feature_init
 
 def preprocess(feat, idx):
     # feat[:, 847] += feat[:, 584] / 30.399262960129 * 51.18194472867024
@@ -335,6 +335,8 @@ def pred_eval(gpu_id, feat_predictors, aggr_predictors_feat_array, aggr_predicto
                 data_list.append(image)
                 preprocess(feat, idx)
                 feat_list.append(feat)
+
+            get_feature_init()
 
         #################################################
         # main part of the loop                         #

@@ -1014,6 +1014,7 @@ class MutableModule(BaseModule):
 
     def forward(self, data_batch, is_train=None):
         assert self.binded and self.params_initialized
+        is_train = False
 
         # get current_shapes
         if self._curr_module.label_shapes is not None:
