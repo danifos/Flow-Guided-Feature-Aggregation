@@ -47,7 +47,7 @@ class VideoLoader:
         self.data_template = self.__getitem__(0)
 
     def _load_frame(self, idx):
-        im = self.images_names[idx]
+        im = self.images[idx]
         target_size = cfg.SCALES[0][0]
         max_size = cfg.SCALES[0][1]
         im, im_scale = resize(im, target_size, max_size, stride=cfg.network.IMAGE_STRIDE)
@@ -61,10 +61,10 @@ class VideoLoader:
         if index == 0 and hasattr(self, 'data_template'):
             return self.data_template
         im_tensor, im_info = self._load_frame(index)
-        return [im_tensor, im_info, im_tensor, im_tensor, im_tensor]
+        return [im_tensor, im_info, im_tensor, im_tensor]
 
     def __len__(self):
-        return len(self.images_names)
+        return len(self.images)
 
 
 class FGFADetector:
