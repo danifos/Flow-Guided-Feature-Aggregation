@@ -96,8 +96,8 @@ def main():
     feat_sym_instance = eval(cfg.symbol + '.' + cfg.symbol)()
     aggr_sym_instance = eval(cfg.symbol + '.' + cfg.symbol)()
 
-    feat_sym = feat_sym_instance.get_feat_symbol(cfg)
-    aggr_sym = aggr_sym_instance.get_train_aggregation_symbol(cfg)
+    feat_sym = feat_sym_instance.get_feat_symbol_origin(cfg)
+    aggr_sym = aggr_sym_instance.get_aggregation_symbol_train(cfg)
 
     # set up class names
     num_classes = 31
@@ -113,8 +113,8 @@ def main():
     # load demo data
 
     # image_names = glob.glob(cur_path + '/../demo/ILSVRC2015_val_00007010/*.JPEG')
-    video_index = 'val_00022000'
-    image_names = glob.glob('/home/niruijie/ILSVRC2015/Data/VID/val/ILSVRC2015_{}/*.JPEG'.format(video_index))
+    video_index = 'val_00007010'
+    image_names = glob.glob('/data/home/niruijie/ILSVRC2015/Data/VID/val/ILSVRC2015_{}/*.JPEG'.format(video_index))
     image_names.sort()
     # output_dir = cur_path + '/../demo/rfcn_fgfa/'
     output_dir = cur_path + '/../demo/{}/'.format(video_index)
@@ -126,6 +126,7 @@ def main():
         assert os.path.exists(im_name), ('%s does not exist'.format(im_name))
         im = cv2.imread(im_name, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
         target_size = cfg.SCALES[0][0]
+        target_size = 600
         max_size = cfg.SCALES[0][1]
         im, im_scale = resize(im, target_size, max_size, stride=cfg.network.IMAGE_STRIDE)
         im_tensor = transform(im, cfg.network.PIXEL_MEANS)
@@ -156,13 +157,15 @@ def main():
     arg_params, aux_params = load_param(cur_path + model, 0, process=True)
 
     feat_predictors = Predictor(feat_sym, data_names, label_names,
-                          context=[mx.gpu(0)], max_data_shapes=max_data_shape,
+                          context=[mx.cpu(0)], max_data_shapes=max_data_shape,
                           provide_data=provide_data, provide_label=provide_label,
-                          arg_params=arg_params, aux_params=aux_params, inputs_need_grad=True)
+                          arg_params=arg_params, aux_params=aux_params,
+                          inputs_need_grad=True)
     aggr_predictors = Predictor(aggr_sym, data_names, label_names,
-                          context=[mx.gpu(0)], max_data_shapes=max_data_shape,
+                          context=[mx.cpu(0)], max_data_shapes=max_data_shape,
                           provide_data=provide_data, provide_label=provide_label,
-                          arg_params=arg_params, aux_params=aux_params, inputs_need_grad=True)
+                          arg_params=arg_params, aux_params=aux_params,
+                          inputs_need_grad=True)
     nms = py_nms_wrapper(cfg.TEST.NMS)
 
 
@@ -196,7 +199,6 @@ def main():
 
             if len(data_list) < all_frame_interval - 1:
                 image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
-                print 'feat', feat_predictors._mod.get_input_grads(False)
                 data_list.append(image)
                 feat_list.append(feat)
 
@@ -205,34 +207,33 @@ def main():
                 # main part of the loop
                 #################################################
                 image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
-                print 'feat'
-                grad_arrays = feat_predictors._mod._curr_module._exec_group.grad_arrays
-                for grad_array in grad_arrays:
-                    print(grad_array[0].shape)
                 data_list.append(image)
                 feat_list.append(feat)
 
                 prepare_data(data_list, feat_list, data_batch)
-                pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
-                aggr_predictors._mod.forward(data_batch)
-                output_all = aggr_predictors._mod.get_outputs(merge_multi_context=False)
-                aggr_predictors._mod.backward()
                 print 'aggr'
-                grad_arrays = aggr_predictors._mod._curr_module._exec_group.grad_arrays
-                for grad_array in grad_arrays:
-                    print(grad_array[0].shape)
-                assert len(aggr_feat) == 1
+                data_batch.data[0][-1].attach_grad()
+                data_batch.data[0][-2].attach_grad()
+                for d in data_batch.data[0]:
+                    print d.shape
+                with mx.autograd.record():
+                    aggr_predictors._mod.forward(data_batch)
+                    loss = aggr_predictors._mod.get_outputs(merge_multi_context=False)[-1]
+                    print loss
+                aggr_predictors._mod.backward()
+                print data_batch.data[0][-1].grad.asnumpy().sum(), data_batch.data[0][-1].grad.shape
+                print data_batch.data[0][-2].grad.asnumpy().sum(), data_batch.data[0][-2].grad.shape
 
                 data_batch.data[0][-2] = None
                 data_batch.provide_data[0][-2] = ('data_cache', None)
                 data_batch.data[0][-1] = None
                 data_batch.provide_data[0][-1] = ('feat_cache', None)
 
-                out_im = process_pred_result(classes, pred_result, num_classes, thresh, cfg, nms, all_boxes, file_idx, max_per_image, vis,
-                                    data_list[cfg.TEST.KEY_FRAME_INTERVAL].asnumpy(), scales)
+                # out_im = process_pred_result(classes, pred_result, num_classes, thresh, cfg, nms, all_boxes, file_idx, max_per_image, vis,
+                #                     data_list[cfg.TEST.KEY_FRAME_INTERVAL].asnumpy(), scales)
                 total_time = time.time()-t1
-                if (cfg.TEST.SEQ_NMS==False):
-                    save_image(output_dir, file_idx, out_im)
+                # if (cfg.TEST.SEQ_NMS==False):
+                #     save_image(output_dir, file_idx, out_im)
                 print 'testing {} {:.4f}s'.format(str(file_idx)+'.JPEG', total_time /(file_idx+1))
                 file_idx += 1
 
@@ -243,22 +244,20 @@ def main():
 
             end_counter = 0
             image, feat = get_resnet_output(feat_predictors, data_batch, data_names)
-            print 'feat', feat_predictors._mod.get_input_grads(False)
             while end_counter < cfg.TEST.KEY_FRAME_INTERVAL + 1:
                 data_list.append(image)
                 feat_list.append(feat)
                 prepare_data(data_list, feat_list, data_batch)
-                pred_result, aggr_feat = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
-                aggr_predictors._mod.backward()
-                print 'aggr', aggr_predictors._mod._curr_module._exec_group.grad_arrays
-                assert len(aggr_feat) == 1
+                # pred_result = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
+                # aggr_predictors._mod.backward()
+                # print 'aggr', aggr_predictors._mod._curr_module._exec_group.grad_arrays
 
-                out_im = process_pred_result(classes, pred_result, num_classes, thresh, cfg, nms, all_boxes, file_idx, max_per_image, vis,
-                                    data_list[cfg.TEST.KEY_FRAME_INTERVAL].asnumpy(), scales)
+                # out_im = process_pred_result(classes, pred_result, num_classes, thresh, cfg, nms, all_boxes, file_idx, max_per_image, vis,
+                #                     data_list[cfg.TEST.KEY_FRAME_INTERVAL].asnumpy(), scales)
 
                 total_time = time.time() - t1
-                if (cfg.TEST.SEQ_NMS == False):
-                    save_image(output_dir, file_idx, out_im)
+                # if (cfg.TEST.SEQ_NMS == False):
+                #     save_image(output_dir, file_idx, out_im)
                 print 'testing {} {:.4f}s'.format(str(file_idx)+'.JPEG', total_time / (file_idx+1))
                 file_idx += 1
                 end_counter+=1

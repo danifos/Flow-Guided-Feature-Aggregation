@@ -1174,7 +1174,7 @@ class resnet_v1_101_flownet_rfcn(Symbol):
         self.sym = group
         return group
 
-    def get_aggregation_symbol_feat(self, cfg, interval):
+    def get_aggregation_symbol_feat(self, cfg, interval, use_adaptive_weight=True):
         # config alias for convenient
         num_classes = cfg.dataset.NUM_CLASSES
         num_reg_classes = (2 if cfg.CLASS_AGNOSTIC else num_classes)
@@ -1212,9 +1212,16 @@ class resnet_v1_101_flownet_rfcn(Symbol):
         # tile part
         aggregated_conv_feat = 0
         warp_list = mx.sym.SliceChannel(conv_feat, axis=0, num_outputs=data_range)
-        for i in range(data_range):
-            tiled_weight = mx.symbol.tile(data=weights[i], reps=(1, 1024, 1, 1))
-            aggregated_conv_feat = aggregated_conv_feat + tiled_weight * warp_list[i]
+        if use_adaptive_weight:
+            for i in range(data_range):
+                tiled_weight = mx.symbol.tile(data=weights[i], reps=(1, 1024, 1, 1))
+                aggregated_conv_feat = aggregated_conv_feat + tiled_weight * warp_list[i]
+        else:
+            for i in range(data_range):
+                if i == interval:
+                    aggregated_conv_feat = aggregated_conv_feat + warp_list[i] / 3.0
+                else:
+                    aggregated_conv_feat = aggregated_conv_feat + warp_list[i] * 2.0 / 3.0 / (data_range-1)
 
         #weights = mx.symbol.tile(data=weights, reps=(1, 1024, 1, 1))
         #aggregated_conv_feat = mx.sym.sum(weights * conv_feat, axis=0, keepdims=True)
@@ -1320,7 +1327,13 @@ class resnet_v1_101_flownet_rfcn(Symbol):
         im_info = mx.sym.Variable(name="im_info")
         data_cache = mx.sym.Variable(name="data_cache")         # data_cache contains data_range images
         feat_cache = mx.sym.Variable(name="feat_cache")         # feat_cache contains the data_range feature maps of the images
-        aggregated_conv_feat = mx.sym.Variable(name='aggregated_conv_feat_cache')
+
+        loss = mx.sym.MakeLoss(name='loss', data=mx.sym.max(data_cache), grad_scale=1.0)
+
+        # group output
+        group = mx.sym.Group([mx.sym.BlockGrad(data_cur), mx.sym.BlockGrad(im_info), mx.sym.BlockGrad(data_cache), mx.sym.BlockGrad(feat_cache), loss])
+        self.sym = group
+        return group
 
         # make data_range copies of the center frame to pass through FlowNet
         cur_data = mx.symbol.slice_axis(data_cache, axis=0, begin=cfg.TEST.KEY_FRAME_INTERVAL, end=cfg.TEST.KEY_FRAME_INTERVAL+1)
@@ -1419,10 +1432,10 @@ class resnet_v1_101_flownet_rfcn(Symbol):
         bbox_pred = mx.sym.Reshape(data=bbox_pred, shape=(cfg.TEST.BATCH_IMAGES, -1, 4 * num_reg_classes),
                                    name='bbox_pred_reshape')
 
-        loss = mx.sym.MakeLoss(name='loss', data=mx.sym.max(cls_prob))
+        loss = mx.sym.MakeLoss(name='loss', data=mx.sym.sum(data_cache), grad_scale=1.0)
 
         # group output
-        group = mx.sym.Group([mx.sym.BlockGrad(data_cur), mx.sym.BlockGrad(rois), mx.sym.BlockGrad(cls_prob), mx.sym.BlockGrad(bbox_pred), mx.sym.BlockGrad(aggregated_conv_feat), loss])
+        group = mx.sym.Group([mx.sym.BlockGrad(data_cur), mx.sym.BlockGrad(rois), mx.sym.BlockGrad(cls_prob), mx.sym.BlockGrad(bbox_pred), loss])
         self.sym = group
         return group
 

@@ -28,16 +28,16 @@ from collections import deque
 from choose_feature import get_feature, get_feature_init
 
 def preprocess(feat, idx):
-    # feat[:, 847] += feat[:, 584] / 30.399262960129 * 51.18194472867024
-    # feat[:, 527] += feat[:, 847] / 51.18194472867024 * 36.46539179435066
-    # feat[:, 847] += feat[:, 849] / 36.95540977509428 * 51.18194472867024
     return
+    reserved_units = []
     ablated_units = []
-    for i in range(1024):
-        if i not in [843, 819, 658, 941, 356, 984, 337, 856, 710, 767]:
-            ablated_units.append(i)
+    if not ablated_units and reserved_units:
+        for i in range(1024):
+            if i not in reserved_units:
+                ablated_units.append(i)
+    if not ablated_units:
+        return
     feat[:, ablated_units, :, :] = 0
-    # feat[:, [5, 19, 25, 39, 46, 84, 95, 104, 106, 112, 139, 152, 165, 168, 185, 226, 232, 267, 274, 284, 296, 322, 341, 346, 362, 366, 375, 383, 390, 397, 419, 429, 435, 440, 454, 461, 485, 492, 493, 511, 513, 527, 538, 539, 544, 555, 578, 584, 626, 631, 694, 749, 750, 831, 847, 849, 863, 877, 879, 896, 897, 910, 944, 946, 964, 1004, 1013], :, :] = 0
 
 class Predictor(object):
     def __init__(self, symbol, data_names, label_names,
@@ -164,7 +164,8 @@ def im_detect(predictor, data_batch, data_names, scales, cfg, aggr_feats=False):
         if 'blockgrad0_output' in output:
             for i, key in enumerate(['_', 'rois_output', 'cls_prob_reshape_output', 'bbox_pred_reshape_output', '_plus{}_output'.format(cfg.TEST.KEY_FRAME_INTERVAL * 2 - 1)]):
                 output[key] = output['blockgrad{}_output'.format(i)]
-        aggr_feats_all.append(output['_plus{}_output'.format(cfg.TEST.KEY_FRAME_INTERVAL * 2 - 1)])
+        if aggr_feats:
+            aggr_feats_all.append(output['_plus{}_output'.format(cfg.TEST.KEY_FRAME_INTERVAL * 2 - 1)])
         if cfg.TEST.HAS_RPN:
             rois = output['rois_output'].asnumpy()[:, 1:]
         else:
@@ -432,6 +433,8 @@ def pred_eval(gpu_id, feat_predictors, aggr_predictors_feat_array, aggr_predicto
                                                                                              net_time / idx * test_data.batch_size,
                                                                                              post_time / idx * test_data.batch_size))
                 end_counter += 1
+
+    get_feature_init()
 
     with open(det_file, 'wb') as f:
         cPickle.dump((all_boxes, frame_ids), f, protocol=cPickle.HIGHEST_PROTOCOL)

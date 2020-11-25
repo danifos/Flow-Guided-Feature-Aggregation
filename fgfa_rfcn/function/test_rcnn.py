@@ -63,7 +63,11 @@ def test_rcnn(cfg, dataset, image_set, root_path, dataset_path, motion_iou_path,
     feat_sym = feat_sym_instance.get_feat_symbol(cfg)
     # aggr_sym = aggr_sym_instance.get_aggregation_symbol(cfg)
     # aggr_sym_feat = aggr_sym_instance.get_aggregation_symbol_feat(cfg, cfg.TEST.KEY_FRAME_INTERVAL)
-    aggr_sym_feat_array = [aggr_sym_instance.get_aggregation_symbol_feat(cfg, interval) for interval in cfg.TEST.INTERVALS]
+    if len(cfg.TEST.INTERVALS) == 1 and cfg.TEST.SELECT_FEATURES:  # Use MANet
+        aggr_sym_feat_array = [aggr_sym_instance.get_aggregation_symbol_feat(cfg, cfg.TEST.INTERVALS[0], flag) for flag in [False, True]]
+        cfg.TEST.INTERVALS = [cfg.TEST.INTERVALS[0], cfg.TEST.INTERVALS[0]]
+    else:
+        aggr_sym_feat_array = [aggr_sym_instance.get_aggregation_symbol_feat(cfg, interval) for interval in cfg.TEST.INTERVALS]
     aggr_sym_rfcn = aggr_sym_instance.get_aggregation_symbol_rfcn(cfg)
 
     imdb = eval(dataset)(image_set, root_path, dataset_path, motion_iou_path, result_path=output_path, enable_detailed_eval=enable_detailed_eval)
